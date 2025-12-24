@@ -1,55 +1,46 @@
+import os
 from flask import Flask, request, jsonify
 from youtube_transcript_api import YouTubeTranscriptApi
-from youtube_transcript_api._errors import TranscriptsDisabled, NoTranscriptFound
-from transformers import pipeline
-import re
 
 app = Flask(__name__)
 
-# Lazy load summarizer to reduce startup time
-summarizer = None
-def get_summarizer():
-    global summarizer
-    if summarizer is None:
-        summarizer = pipeline("summarization", model="facebook/bart-large-cnn")
-    return summarizer
+@app.route('/')
+def home():
+    return "Clip2Text Backend Running!"
 
-def extract_video_id(url):
-    match = re.search(r"(?:v=|\/)([0-9A-Za-z_-]{11})", url)
-    return match.group(1) if match else None
-
-@app.route("/summarize", methods=["POST"])
-def summarize():
+@app.route('/get_transcript', methods=['POST'])
+def get_transcript():
     data = request.get_json()
-    youtube_url = data.get("url")
+    if not data or 'url' not in data:
+        return jsonify({"error": "Missing 'url' in request body"}), 400
 
-    if not youtube_url:
-        return jsonify({"error": "No URL provided"}), 400
+    video_url = data.get('url', '')
 
-    video_id = extract_video_id(youtube_url)
-    if not video_id:
+    if "youtube.com" not in video_url and "youtu.be" not in video_url:
         return jsonify({"error": "Invalid YouTube URL"}), 400
 
     try:
-        transcript_data = YouTubeTranscriptApi.get_transcript(video_id)
-        transcript_text = " ".join([t["text"] for t in transcript_data])
-    except (TranscriptsDisabled, NoTranscriptFound):
-        return jsonify({"error": "Transcript not available for this video."}), 400
+        # Extract video ID from URL
+        if "youtu.be" in video_url:
+            video_id = video_url.split('/')[-1]
+        else:
+            video_id = video_url.split('v=')[-1].split('&')[0]
+
+        transcript_list = YouTubeTranscriptApi.get_transcript(video_id)
+        transcript_text = " ".join([item['text'] for item in transcript_list])
+
+        return jsonify({"transcript": transcript_text})
+
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        # Check for common YouTubeTranscriptApi errors
+        error_msg = str(e)
+        if "No transcript found" in error_msg:
+            return jsonify({"error": "Transcript not available for this video"}), 404
+        elif "Video unavailable" in error_msg:
+            return jsonify({"error": "The YouTube video is unavailable"}), 404
+        else:
+            return jsonify({"error": f"Failed to fetch transcript: {error_msg}"}), 500
 
-    summary = get_summarizer()(
-        transcript_text[:3000],
-        max_length=150,
-        min_length=60,
-        do_sample=False
-    )[0]["summary_text"]
-
-    return jsonify({
-        "transcript": transcript_text,
-        "summary": summary
-    })
-
-if __name__ == "__main__":
-    # Use 0.0.0.0 so Render can access the server externally
-    app.run(host="0.0.0.0", port=5000)
+if __name__ == '__main__':
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
