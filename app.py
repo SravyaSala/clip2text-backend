@@ -1,55 +1,40 @@
-from flask import Flask, render_template, request, jsonify
+import os
+from flask import Flask, request, jsonify
+from flask_cors import CORS
 from youtube_transcript_api import YouTubeTranscriptApi
-from youtube_transcript_api._errors import TranscriptsDisabled, NoTranscriptFound
-from transformers import pipeline
-import re
 
 app = Flask(__name__)
+CORS(app)   # ✅ THIS IS THE FIX
 
-# Load summarization model
-summarizer = pipeline("summarization", model="facebook/bart-large-cnn")
-
-def extract_video_id(url):
-    match = re.search(r"(?:v=|\/)([0-9A-Za-z_-]{11})", url)
-    return match.group(1) if match else None
-
-@app.route("/")
+@app.route('/')
 def home():
-    return render_template("index.html")
+    return "Clip2Text Backend Running!"
 
-@app.route("/summarize", methods=["POST"])
-def summarize():
+@app.route('/get_transcript', methods=['POST'])
+def get_transcript():
     data = request.get_json()
-    youtube_url = data.get("url")
+    if not data or 'url' not in data:
+        return jsonify({"error": "Missing 'url' in request body"}), 400
 
-    if not youtube_url:
-        return jsonify({"error": "No URL provided"}), 400
+    video_url = data.get('url', '')
 
-    video_id = extract_video_id(youtube_url)
-    if not video_id:
+    if "youtube.com" not in video_url and "youtu.be" not in video_url:
         return jsonify({"error": "Invalid YouTube URL"}), 400
 
-    # TRY–EXCEPT MUST BE TOGETHER
     try:
-        transcript_data = YouTubeTranscriptApi.get_transcript(video_id)
-    except (TranscriptsDisabled, NoTranscriptFound):
-        return jsonify({
-            "error": "Transcript not available for this video. Try a video with captions."
-        }), 400
+        if "youtu.be" in video_url:
+            video_id = video_url.split('/')[-1]
+        else:
+            video_id = video_url.split('v=')[-1].split('&')[0]
 
-    transcript_text = " ".join([item["text"] for item in transcript_data])
+        transcript_list = YouTubeTranscriptApi.get_transcript(video_id)
+        transcript_text = " ".join([item['text'] for item in transcript_list])
 
-    summary = summarizer(
-        transcript_text[:3000],
-        max_length=150,
-        min_length=60,
-        do_sample=False
-    )[0]["summary_text"]
+        return jsonify({"transcript": transcript_text})
 
-    return jsonify({
-        "transcript": transcript_text,
-        "summary": summary
-    })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
-if __name__ == "__main__":
-    app.run(debug=True)
+if __name__ == '__main__':
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=port)
