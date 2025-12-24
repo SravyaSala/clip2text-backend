@@ -1,8 +1,10 @@
 import os
 from flask import Flask, request, jsonify
+from flask_cors import CORS
 from youtube_transcript_api import YouTubeTranscriptApi
 
 app = Flask(__name__)
+CORS(app)   # ✅ THIS IS THE MISSING PIECE
 
 @app.route('/')
 def home():
@@ -20,19 +22,18 @@ def get_transcript():
         return jsonify({"error": "Invalid YouTube URL"}), 400
 
     try:
-        # Extract video ID from URL
+        # Extract video ID
         if "youtu.be" in video_url:
             video_id = video_url.split('/')[-1]
         else:
             video_id = video_url.split('v=')[-1].split('&')[0]
 
         transcript_list = YouTubeTranscriptApi.get_transcript(video_id)
-        transcript_text = " ".join([item['text'] for item in transcript_list])
+        transcript_text = " ".join(item['text'] for item in transcript_list)
 
         return jsonify({"transcript": transcript_text})
 
     except Exception as e:
-        # Check for common YouTubeTranscriptApi errors
         error_msg = str(e)
         if "No transcript found" in error_msg:
             return jsonify({"error": "Transcript not available for this video"}), 404
