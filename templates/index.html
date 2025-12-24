@@ -253,123 +253,97 @@
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            const youtubeUrlInput = document.getElementById('youtubeUrl');
-            const generateBtn = document.getElementById('generateBtn');
-            const btnText = document.getElementById('btnText');
-            const spinner = document.getElementById('spinner');
-            const videoPreview = document.getElementById('videoPreview');
-            
-            // Generate summary button click
-            generateBtn.addEventListener('click', function() {
-                const youtubeUrl = youtubeUrlInput.value.trim();
-                
-                // Validate URL
-                if (!youtubeUrl) {
-                    alert('Please enter a YouTube URL');
-                    return;
-                }
-                
-                // Check if it's a YouTube URL
-                if (!isValidYouTubeUrl(youtubeUrl)) {
-                    alert('Please enter a valid YouTube URL (e.g., https://www.youtube.com/watch?v=...)');
-                    return;
-                }
-                
-                // Extract video ID
-                const videoId = extractVideoId(youtubeUrl);
-                if (!videoId) {
-                    alert('Could not extract video ID from the URL');
-                    return;
-                }
-                
-                // Show loading state
-                btnText.textContent = 'Processing...';
-                spinner.classList.remove('d-none');
-                generateBtn.disabled = true;
-                
-                // Show video preview
-                videoPreview.innerHTML = `
-                    <div class="ratio ratio-16x9">
-                        <iframe src="https://www.youtube.com/embed/${videoId}" frameborder="0" allowfullscreen></iframe>
-                    </div>
-                    <p class="mt-2">Video being processed: ${youtubeUrl}</p>
-                `;
-                
-                // Simulate API call (in a real app, this would be an actual API call to your backend)
-               fetch("/summarize", {
-    method: "POST",
-    headers: {
-        "Content-Type": "application/json"
-    },
-    body: JSON.stringify({
-        url: youtubeUrl
-    })
-})
-.then(response => response.json())
-.then(data => {
-    btnText.textContent = 'Generate Summary';
-    spinner.classList.add('d-none');
-    generateBtn.disabled = false;
+document.addEventListener('DOMContentLoaded', function () {
+    const youtubeUrlInput = document.getElementById('youtubeUrl');
+    const generateBtn = document.getElementById('generateBtn');
+    const btnText = document.getElementById('btnText');
+    const spinner = document.getElementById('spinner');
+    const videoPreview = document.getElementById('videoPreview');
 
-    if (data.error) {
-        alert(data.error);
-        return;
+    generateBtn.addEventListener('click', function () {
+        const youtubeUrl = youtubeUrlInput.value.trim();
+
+        if (!youtubeUrl) {
+            alert('Please enter a YouTube URL');
+            return;
+        }
+
+        if (!isValidYouTubeUrl(youtubeUrl)) {
+            alert('Please enter a valid YouTube URL');
+            return;
+        }
+
+        const videoId = extractVideoId(youtubeUrl);
+        if (!videoId) {
+            alert('Could not extract video ID');
+            return;
+        }
+
+        btnText.textContent = 'Processing...';
+        spinner.classList.remove('d-none');
+        generateBtn.disabled = true;
+
+        videoPreview.innerHTML = `
+            <div class="ratio ratio-16x9">
+                <iframe src="https://www.youtube.com/embed/${videoId}" frameborder="0" allowfullscreen></iframe>
+            </div>
+            <p class="mt-2">Video being processed</p>
+        `;
+
+        // ✅ CORRECT BACKEND CALL
+        fetch("https://clip2text-backend.onrender.com/get_transcript", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({ url: youtubeUrl })
+        })
+        .then(res => res.json())
+        .then(data => {
+            btnText.textContent = 'Generate Summary';
+            spinner.classList.add('d-none');
+            generateBtn.disabled = false;
+
+            if (data.error) {
+                alert(data.error);
+                return;
+            }
+
+            document.getElementById('results').classList.remove('d-none');
+            document.getElementById('results').scrollIntoView({ behavior: 'smooth' });
+
+            document.getElementById('transcript').innerText = data.transcript;
+
+            // ✅ backend doesn't return summary yet
+            document.getElementById('summary').innerText =
+                "Summary feature will be added next 🚀";
+        })
+        .catch(err => {
+            console.error(err);
+            alert("Something went wrong. Try again.");
+            btnText.textContent = 'Generate Summary';
+            spinner.classList.add('d-none');
+            generateBtn.disabled = false;
+        });
+    });
+
+    function isValidYouTubeUrl(url) {
+        return /^(https?:\/\/)?(www\.)?(youtube\.com|youtu\.be)\/.+$/.test(url);
     }
 
-    document.getElementById('results').classList.remove('d-none');
-    document.getElementById('results').scrollIntoView({ behavior: 'smooth' });
+    function extractVideoId(url) {
+        const match = url.match(/^.*(youtu.be\/|v\/|embed\/|watch\?v=)([^#&?]*).*/);
+        return match && match[2].length === 11 ? match[2] : null;
+    }
 
-    document.getElementById('transcript').innerText = data.transcript;
-    document.getElementById('summary').innerText = data.summary;
-})
-.catch(error => {
-    console.error(error);
-    alert("Something went wrong. Try again.");
-    btnText.textContent = 'Generate Summary';
-    spinner.classList.add('d-none');
-    generateBtn.disabled = false;
+    document.getElementById('newVideoBtn').addEventListener('click', function () {
+        youtubeUrlInput.value = '';
+        videoPreview.innerHTML = '';
+        document.getElementById('results').classList.add('d-none');
+        document.getElementById('summarize').scrollIntoView({ behavior: 'smooth' });
+    });
 });
+</script>
 
-
-            });
-            
-            // Helper function to validate YouTube URL
-            function isValidYouTubeUrl(url) {
-                const pattern = /^(https?:\/\/)?(www\.)?(youtube\.com|youtu\.?be)\/.+$/;
-                return pattern.test(url);
-            }
-            
-            // Helper function to extract video ID from URL
-            function extractVideoId(url) {
-                const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
-                const match = url.match(regExp);
-                return (match && match[2].length === 11) ? match[2] : null;
-            }
-            
-            // Audio button click
-            document.getElementById('audioBtn').addEventListener('click', function() {
-                alert('In a real implementation, this would play an audio version of the summary using text-to-speech technology.');
-            });
-            
-            // Download TXT button
-            document.getElementById('downloadTxtBtn').addEventListener('click', function() {
-                alert('In a real implementation, this would download the transcript and summary as a text file.');
-            });
-            
-            // New video button
-            document.getElementById('newVideoBtn').addEventListener('click', function() {
-                // Reset the form
-                youtubeUrlInput.value = '';
-                videoPreview.innerHTML = '';
-                
-                // Hide results section
-                document.getElementById('results').classList.add('d-none');
-                
-                // Scroll to summarize section
-                document.getElementById('summarize').scrollIntoView({ behavior: 'smooth' });
-            });
-        });
-    </script>
 </body>
 </html>

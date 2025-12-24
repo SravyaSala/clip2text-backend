@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify
+from flask import Flask, render_template, request, jsonify
 from youtube_transcript_api import YouTubeTranscriptApi
 from youtube_transcript_api._errors import TranscriptsDisabled, NoTranscriptFound
 from transformers import pipeline
@@ -6,17 +6,16 @@ import re
 
 app = Flask(__name__)
 
-# Lazy load summarizer to reduce startup time
-summarizer = None
-def get_summarizer():
-    global summarizer
-    if summarizer is None:
-        summarizer = pipeline("summarization", model="facebook/bart-large-cnn")
-    return summarizer
+# Load summarization model
+summarizer = pipeline("summarization", model="facebook/bart-large-cnn")
 
 def extract_video_id(url):
     match = re.search(r"(?:v=|\/)([0-9A-Za-z_-]{11})", url)
     return match.group(1) if match else None
+
+@app.route("/")
+def home():
+    return render_template("index.html")
 
 @app.route("/summarize", methods=["POST"])
 def summarize():
@@ -30,15 +29,17 @@ def summarize():
     if not video_id:
         return jsonify({"error": "Invalid YouTube URL"}), 400
 
+    # TRY–EXCEPT MUST BE TOGETHER
     try:
         transcript_data = YouTubeTranscriptApi.get_transcript(video_id)
-        transcript_text = " ".join([t["text"] for t in transcript_data])
     except (TranscriptsDisabled, NoTranscriptFound):
-        return jsonify({"error": "Transcript not available for this video."}), 400
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({
+            "error": "Transcript not available for this video. Try a video with captions."
+        }), 400
 
-    summary = get_summarizer()(
+    transcript_text = " ".join([item["text"] for item in transcript_data])
+
+    summary = summarizer(
         transcript_text[:3000],
         max_length=150,
         min_length=60,
@@ -51,5 +52,4 @@ def summarize():
     })
 
 if __name__ == "__main__":
-    # Use 0.0.0.0 so Render can access the server externally
-    app.run(host="0.0.0.0", port=5000)
+    app.run(debug=True)
