@@ -2,3 +2,5 @@ Flask>=2.3.0,<2.4
 torch==2.9.1
 youtube-transcript-api>=0.6.0
 transformers>=4.30.0
+gunicorn>=20.1.0
+requests>=2.31.0
